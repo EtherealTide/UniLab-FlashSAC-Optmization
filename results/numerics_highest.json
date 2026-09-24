@@ -1,0 +1,41 @@
+{
+  "matmul_precision": "highest",
+  "metrics": {
+    "eager": {
+      "critic_loss": 5.108909606933594,
+      "reward_scale_std": 1.0,
+      "actor_loss": 0.34809449315071106,
+      "actor_entropy": -21.309171676635742,
+      "temperature": 0.009999999776482582,
+      "temperature_loss": -0.19396445155143738
+    },
+    "compiled": {
+      "critic_loss": 5.1089091300964355,
+      "reward_scale_std": 1.0,
+      "actor_loss": 0.34805405139923096,
+      "actor_entropy": -21.30916976928711,
+      "temperature": 0.009999999776482582,
+      "temperature_loss": -0.19396443665027618
+    },
+    "hybrid": {
+      "critic_loss": 0.0,
+      "reward_scale_std": 0.0,
+      "actor_loss": 0.0,
+      "actor_entropy": 0.0,
+      "temperature": 0.0,
+      "temperature_loss": 0.0
+    }
+  },
+  "comparisons_to_eager": {
+    "compiled": {
+      "parameter_max_abs": 0.0005996767431497574,
+      "parameter_mean_abs": 1.2269207161352824e-07,
+      "metric_max_abs": 4.044175148010254e-05
+    },
+    "hybrid": {
+      "parameter_max_abs": 0.021662116050720215,
+      "parameter_mean_abs": 0.0001730147487251088,
+      "metric_max_abs": 21.309171676635742
+    }
+  }
+}

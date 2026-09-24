@@ -1,0 +1,391 @@
+{
+  "matmul_precision": "highest",
+  "steps": 10,
+  "batch_count": 4,
+  "batch_size": 2048,
+  "obs_dim": 98,
+  "critic_obs_dim": 101,
+  "action_dim": 29,
+  "use_amp": true,
+  "amp_dtype": "auto",
+  "metrics": {
+    "eager": {
+      "critic_loss": 4.722857475280762,
+      "reward_scale_std": 1.0,
+      "actor_loss": 1.3941880464553833,
+      "actor_entropy": -102.60574340820312,
+      "temperature": 0.010026837699115276,
+      "temperature_loss": -0.8897663354873657
+    },
+    "loss_compile": {
+      "critic_loss": 4.7230939865112305,
+      "reward_scale_std": 1.0,
+      "actor_loss": 1.3936362266540527,
+      "actor_entropy": -102.52717590332031,
+      "temperature": 0.010026837699115276,
+      "temperature_loss": -0.8889785408973694
+    },
+    "full_compile": {
+      "critic_loss": 4.723347187042236,
+      "reward_scale_std": 1.0,
+      "actor_loss": 1.3797931671142578,
+      "actor_entropy": -101.46727752685547,
+      "temperature": 0.010026823729276657,
+      "temperature_loss": -0.8783499002456665
+    },
+    "manual_graph": {
+      "critic_loss": 4.722573280334473,
+      "reward_scale_std": 1.0,
+      "actor_loss": 1.394088864326477,
+      "actor_entropy": -102.60568237304688,
+      "temperature": 0.010026837699115276,
+      "temperature_loss": -0.889765739440918
+    },
+    "hybrid": {
+      "critic_loss": 4.723363399505615,
+      "reward_scale_std": 1.0,
+      "actor_loss": 1.3801755905151367,
+      "actor_entropy": -101.45730590820312,
+      "temperature": 0.010026823729276657,
+      "temperature_loss": -0.8782498836517334
+    }
+  },
+  "update_counters": {
+    "eager": {
+      "optimizer_steps": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "scheduler_epochs": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    },
+    "loss_compile": {
+      "optimizer_steps": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "scheduler_epochs": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    },
+    "full_compile": {
+      "optimizer_steps": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "scheduler_epochs": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    },
+    "manual_graph": {
+      "optimizer_steps": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "scheduler_epochs": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    },
+    "hybrid": {
+      "optimizer_steps": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "scheduler_epochs": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    }
+  },
+  "comparisons_to_eager": {
+    "loss_compile": {
+      "parameters": {
+        "max_abs": 0.003169167786836624,
+        "mean_abs": 3.381040005479008e-05
+      },
+      "buffers": {
+        "max_abs": 0.0008363239467144012,
+        "mean_abs": 2.7602201953413896e-05
+      },
+      "optimizer_state": {
+        "max_abs": 0.0008680701139383018,
+        "mean_abs": 1.9203346255380893e-06
+      },
+      "metric_max_abs": 0.0785675048828125
+    },
+    "manual_graph": {
+      "parameters": {
+        "max_abs": 0.0010273009538650513,
+        "mean_abs": 1.3797724022879265e-05
+      },
+      "buffers": {
+        "max_abs": 0.0003465190529823303,
+        "mean_abs": 1.1200273547729012e-05
+      },
+      "optimizer_state": {
+        "max_abs": 0.0006334261270239949,
+        "mean_abs": 1.3933254194853362e-06
+      },
+      "metric_max_abs": 0.0002841949462890625
+    },
+    "hybrid": {
+      "parameters": {
+        "max_abs": 0.00443846732378006,
+        "mean_abs": 6.552112608915195e-05
+      },
+      "buffers": {
+        "max_abs": 0.0018207989633083344,
+        "mean_abs": 6.0497586673591286e-05
+      },
+      "optimizer_state": {
+        "max_abs": 0.004727005958557129,
+        "mean_abs": 2.724964133449248e-06
+      },
+      "metric_max_abs": 1.1484375
+    },
+    "full_compile": {
+      "parameters": {
+        "max_abs": 0.004435963928699493,
+        "mean_abs": 6.574768485734239e-05
+      },
+      "buffers": {
+        "max_abs": 0.001817791722714901,
+        "mean_abs": 6.038600258762017e-05
+      },
+      "optimizer_state": {
+        "max_abs": 0.004710972309112549,
+        "mean_abs": 2.725656031543622e-06
+      },
+      "metric_max_abs": 1.1384658813476562
+    }
+  },
+  "hybrid_comparison_to_full_compile": {
+    "parameters": {
+      "max_abs": 0.0013448139652609825,
+      "mean_abs": 2.1131698304088786e-05
+    },
+    "buffers": {
+      "max_abs": 0.0008370522409677505,
+      "mean_abs": 1.4135054698272143e-05
+    },
+    "optimizer_state": {
+      "max_abs": 7.708091288805008e-05,
+      "mean_abs": 6.685936568828765e-07
+    },
+    "metric_max_abs": 0.00997161865234375
+  },
+  "validation": {
+    "thresholds": {
+      "metric_max_abs": 0.05,
+      "parameter_mean_abs": 0.0005,
+      "buffer_mean_abs": 0.0005,
+      "optimizer_state_mean_abs": 5e-05
+    },
+    "checks": {
+      "all_metrics_finite": true,
+      "metric_outputs_not_overwritten": true,
+      "optimizer_steps_match": true,
+      "scheduler_steps_match": true,
+      "hybrid_metric_close": true,
+      "hybrid_parameter_mean_close": true,
+      "hybrid_buffer_mean_close": true,
+      "hybrid_optimizer_mean_close": true
+    },
+    "passed": true
+  }
+}

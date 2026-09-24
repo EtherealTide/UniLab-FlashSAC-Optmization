@@ -1,0 +1,34 @@
+{
+  "torch": "2.8.0+cu128",
+  "torch_cuda": "12.8",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "results": [
+    {
+      "device": "cuda",
+      "deferred_metrics": false,
+      "cuda_graphs": false,
+      "rounds": 50,
+      "updates": 8,
+      "batch_size": 2048,
+      "ms_per_round": 39.97700510022696
+    },
+    {
+      "device": "cuda",
+      "deferred_metrics": true,
+      "cuda_graphs": false,
+      "rounds": 50,
+      "updates": 8,
+      "batch_size": 2048,
+      "ms_per_round": 36.01427634013817
+    },
+    {
+      "device": "cuda",
+      "deferred_metrics": true,
+      "cuda_graphs": true,
+      "rounds": 50,
+      "updates": 8,
+      "batch_size": 2048,
+      "ms_per_round": 22.85415782011114
+    }
+  ]
+}
