@@ -168,6 +168,11 @@ def _wait_for_inference_tick(
             if not learner_pid_is_alive(learner_pid):
                 raise RuntimeError(f"Learner process died before inference tick {tick_id}")
             if phase is LearnerPhase.STOPPED:
+                if stop_event.is_set():
+                    # Normal shutdown: the learner finished (or is tearing down
+                    # after an error it reports itself) and requested stop
+                    # before publishing STOPPED. Release without an error.
+                    return False
                 raise RuntimeError(f"Learner stopped before inference tick {tick_id}")
             if phase is not last_phase or progress != last_progress:
                 last_phase = phase
