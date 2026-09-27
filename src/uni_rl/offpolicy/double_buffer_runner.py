@@ -376,8 +376,12 @@ class DoubleBufferOffPolicyRunner(OffPolicyRunner):
 
     def _shutdown_collector(self) -> None:
         """Release the lock-step collector without waiting on a tick deadline."""
-        self._learner_coordination.mark_stopped()
+        # Set the stop event before publishing STOPPED: a collector that
+        # observes STOPPED must already see the stop request, so a normal
+        # training completion is released gracefully instead of raising
+        # "Learner stopped before inference tick".
         self._stop_event.set()
+        self._learner_coordination.mark_stopped()
         process = self._collector_process
         if process is not None and process.is_alive():
             process.join(timeout=5.0)

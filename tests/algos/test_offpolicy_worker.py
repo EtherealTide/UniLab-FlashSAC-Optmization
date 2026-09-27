@@ -231,6 +231,35 @@ def test_learner_stop_releases_inference_response_wait() -> None:
     )
 
 
+def test_stopped_phase_with_stop_request_releases_wait_gracefully() -> None:
+    """Normal training completion sets the stop event before STOPPED.
+
+    A collector already inside the wait loop must observe the completed run as
+    a graceful release, not as a "Learner stopped" crash.
+    """
+    from uni_rl.offpolicy.coordination import LearnerCoordinationState
+
+    state = LearnerCoordinationState()
+    state.mark_busy()
+    stop_event = threading.Event()
+
+    def shutdown() -> None:
+        # Mirrors DoubleBufferRunner._shutdown_collector ordering.
+        stop_event.set()
+        state.mark_stopped()
+
+    threading.Timer(0.01, shutdown).start()
+
+    assert not _wait_for_inference_tick(
+        queue.Queue(),
+        0,
+        stop_event,
+        learner_coordination=state,
+        learner_pid=None,
+        timeout=10.0,
+    )
+
+
 class _DummyActor:
     def __init__(self) -> None:
         self.calls: list[tuple[torch.Tensor, torch.Tensor, bool]] = []

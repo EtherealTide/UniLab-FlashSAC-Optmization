@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-09-27
+
+### Fixed
+
+- Normal off-policy training completion no longer crashes the lock-step
+  collector with "Learner stopped before inference tick". The runner now
+  requests collector stop before publishing the STOPPED phase, and the
+  collector treats a STOPPED phase accompanied by a stop request as a graceful
+  release.
+
 ## [1.4.2] - 2026-09-27
 
 ### Added
