@@ -1,45 +1,40 @@
-# UniLab FlashSAC 单卡性能优化报告
+# UniLab FlashSAC 优化报告
 
 ## 结论
 
-在 RTX 4090、PyTorch 2.8.0+cu128、BF16、batch 2048 的 learner 稳态微基准中，三次
-运行各取 50 个 round 样本并池化：
+这次优化针对的是 FlashSAC 的 learner，不是 Triton。主要动作是把 actor/critic 的完整 objective 放进 `torch.compile`，减少小 kernel launch 和中间 tensor；同时保留 graph-safe 的固定 metrics buffer、GPU finite guard、延迟 metrics D2H，以及 actor 更新时冻结 critic 参数。
+
+RTX 4090、PyTorch 2.8.0+cu128、BF16、batch 2048 的 learner 稳态微基准如下，单位为 ms/round：
 
 | 路径 | mean | median | p90 | p95 |
-| --- | ---: | ---: | ---: | ---: |
-| eager deferred metrics | 13.221 | 13.201 | 13.724 | 13.863 |
-| manual CUDA Graph | 10.661 | 10.840 | 11.119 | 11.160 |
+|---|---:|---:|---:|---:|
+| deferred eager | 13.221 | 13.201 | 13.724 | 13.863 |
 | full-objective compile | **4.873** | **4.916** | **5.368** | **5.764** |
 | full compile + manual Graph | **4.455** | **4.289** | **4.957** | **5.000** |
 
-单位为 ms/round。相对 deferred eager，full compile 平均降低 63.1%，hybrid 平均降低
-66.3%。默认推荐 full-objective compile；hybrid 作为固定 batch 的峰值性能档。
+full-objective compile 相比 deferred eager 平均减少 63.1%。hybrid 再快一些，但依赖固定 batch 和更复杂的 graph 生命周期，默认不打开。
 
-## 三次 run 的均值
+## 真实物理训练
 
-| 路径 | run 1 | run 2 | run 3 | run mean average ± stdev |
-| --- | ---: | ---: | ---: | ---: |
-| eager deferred | 13.143 | 13.056 | 13.465 | 13.221 ± 0.216 |
-| manual CUDA Graph | 10.595 | 10.661 | 10.728 | 10.661 ± 0.066 |
-| full-objective compile | 5.083 | 4.756 | 4.779 | 4.873 ± 0.182 |
-| full compile + manual Graph | 4.438 | 4.423 | 4.503 | 4.455 ± 0.042 |
+新增 `experiments/benchmark_flashsac_training.py`。它调用 UniLab 的生产 `train_flashsac.py`，实际启动 MuJoCo 或 Motrix collector，并把 learner/collector 的 Rich CLI 面板实时转发到终端。每轮 timing 同时写入 JSON，统计 mean、median、p90、p95。
 
-完整逐次 mean/median/p90/p95 表、优化原因、限制和正确性证据见
-[FLASH_SAC_OPTIMIZATION.md](FLASH_SAC_OPTIMIZATION.md)；可复现实验命令见
-[REPRODUCE.md](REPRODUCE.md)。
+示例命令：
 
-## 关键修复
+```bash
+cd /path/to/UniLab
+uv run /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_training.py \
+  --unilab-root /path/to/UniLab \
+  --backend mujoco --iterations 20 --num-envs 256 \
+  --output /path/to/UniLab-FlashSAC-Optmization/results/physical_training/summary.json
+```
 
-- metrics D2H 延迟到 cycle 末尾；
-- finite guard 留在 GPU；
-- actor 更新冻结 critic 参数但保留 `dQ/da`；
-- categorical TD projection 改为纯 tensor，解决 capture 失败；
-- 首次手工 Graph capture 后立即 replay；
-- full compile + 外层 Graph 使用固定 metric buffer，避免 overwrite；
-- 将 compile 边界扩展到完整 actor/critic objective。
+`--skip-first 4` 可排除 compile 冷启动，但 JSON 仍保留 `rows_all`。总 iteration 不等于 learner 加 collector，因为 double-buffer runner 会让两者重叠；性能判断应看完整 `iter_ms`。
 
-## 验证
+本机短跑已确认真实 MuJoCo 链路能够输出实时训练面板和 timing。短跑样本只用于验证工具，不替代正式多次重复实验。
 
-聚焦测试 `68 passed`，全量测试 `413 passed, 8 skipped, 3 deselected`；Ruff、mypy、
-pyright 通过；10 步 BF16 数值对照和 1000 replay 显存压力测试通过。该报告是 learner
-microbenchmark，不声称端到端机器人 reward/FPS 已完成验收。
+## 注意事项
+
+- 需要在 UniLab 环境中运行，并安装选定物理 backend 的 extra。
+- 当前本地执行时必须使用包含优化代码的 `unilab_rl` checkout，脚本默认使用本仓库 `src/uni_rl`。
+- `training.log_dir` 已在脚本内部加 Hydra 引号；直接传未加引号的绝对路径会触发 `LexerNoViableAltException`。
+- 这份报告覆盖原 learner 优化结果；Triton 实验不属于本报告。
