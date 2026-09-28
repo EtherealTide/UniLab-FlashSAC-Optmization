@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import os
+import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -315,6 +317,7 @@ class FlashSACLearner(LearnerBoilerplateMixin):
         ] = []
         self._update_cycle_lr_cursors: dict[int, int] = {}
         self._capture_update_cycle = False
+        self._update_cycle_capture_failed = False
         self._compile_full_update_cycle = bool(self.use_compile and self._nvidia_cuda)
         if self._compile_full_update_cycle and self.scaler is not None:
             raise ValueError(
@@ -1060,7 +1063,18 @@ class FlashSACLearner(LearnerBoilerplateMixin):
         graph = torch.cuda.CUDAGraph()
         try:
             self._capture_update_cycle = True
-            with torch.cuda.device(self.device), torch.cuda.graph(graph):
+            # thread_local: with the legacy "global" mode, a capture-unsafe CUDA
+            # call from ANY thread (replay ingress daemon, in-process sim
+            # backend, ...) silently invalidates the capture. The graph only
+            # records this thread's update-cycle work, so thread_local is both
+            # correct and robust against unrelated background CUDA activity.
+            with (
+                torch.cuda.device(self.device),
+                torch.cuda.graph(
+                    graph,
+                    capture_error_mode=os.environ.get("UNI_RL_CAPTURE_ERROR_MODE", "thread_local"),
+                ),
+            ):
                 self._run_update_cycle_core(
                     static_batch,
                     updates_per_step=updates_per_step,
@@ -1068,6 +1082,19 @@ class FlashSACLearner(LearnerBoilerplateMixin):
                     target_frequency=target_frequency,
                     policy_before_critic=policy_before_critic,
                 )
+        except torch.AcceleratorError:
+            # Capture only records kernels without executing them, so a failed
+            # capture leaves training state untouched. Warn once and fall back
+            # to running the update cycle eagerly for the rest of training;
+            # the compiled objectives stay active, only graph replay is lost.
+            self._update_cycle_capture_failed = True
+            self._update_cycle_graph = None
+            warnings.warn(
+                "FlashSAC whole-cycle CUDA graph capture failed; falling back to "
+                "eager update-cycle execution for the rest of training.",
+                stacklevel=2,
+            )
+            return
         finally:
             self._capture_update_cycle = False
             self._restore_update_cycle_group_lrs(saved_groups)
@@ -1091,13 +1118,26 @@ class FlashSACLearner(LearnerBoilerplateMixin):
                 "FlashSAC update_cycle() requires the NVIDIA CUDA whole-cycle path; "
                 "use the per-update methods for compatibility devices"
             )
-        self._ensure_update_cycle_graph(
-            large_batch,
-            updates_per_step=updates_per_step,
-            policy_frequency=policy_frequency,
-            target_frequency=target_frequency,
-            policy_before_critic=policy_before_critic,
-        )
+        if not self._update_cycle_capture_failed:
+            self._ensure_update_cycle_graph(
+                large_batch,
+                updates_per_step=updates_per_step,
+                policy_frequency=policy_frequency,
+                target_frequency=target_frequency,
+                policy_before_critic=policy_before_critic,
+            )
+        if self._update_cycle_capture_failed:
+            # Eager fallback after a failed capture: the compiled objectives stay
+            # active, only graph replay is lost. Schedulers step inside the
+            # per-update methods on this path (not capturing).
+            self._run_update_cycle_core(
+                large_batch,
+                updates_per_step=updates_per_step,
+                policy_frequency=policy_frequency,
+                target_frequency=target_frequency,
+                policy_before_critic=policy_before_critic,
+            )
+            return
         assert self._update_cycle_graph is not None
         self._fill_update_cycle_lr_specs(zero=False)
         self._update_cycle_graph.replay()
