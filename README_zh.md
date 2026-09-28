@@ -16,16 +16,18 @@ RTX 4090 learner 微基准（BF16、batch 2048）中：
 
 ## 真实训练计时
 
-计时工具会启动 UniLab 的生产 `train_flashsac.py`，真正创建 MuJoCo/Motrix 环境，并保留 Rich 的实时训练面板。它同时把每轮 learner、collector、总 iteration、reward 写入 JSON，并统计 mean、median、p90、p95。
+计时工具会启动 UniLab 的生产 `train_flashsac.py`，真正创建 MuJoCo/Motrix 环境，并保留 Rich 的实时训练面板。默认训练 **1000 iter**，只对最后 **500 iter** 统计 mean、median、p90、p95；全部逐轮数据仍保存在 JSON 的 `rows_all` 中。
 
 ```bash
 cd /path/to/UniLab
 uv run /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_training.py \
   --unilab-root /path/to/UniLab \
-  --backend mujoco --iterations 20 --num-envs 256 \
+  --backend mujoco --num-envs 256 \
   --output /path/to/UniLab-FlashSAC-Optmization/results/physical_training/summary.json
 ```
 
-compile 首轮会包含 Inductor 编译开销；观察稳态时可以加 `--skip-first 4`。训练日志保存在 `results/physical_training/<timestamp>/`，可用 TensorBoard 查看。
+默认 `updates_per_step=2`、`policy_frequency=2`，所以一个训练 iter 会执行 2 次 critic update，以及 1 次 actor update 和随 actor 一起进行的 1 次 temperature update。报告中的 4.873 ms 是上述完整 learner round 的时间，不是单次 update；同口径优化前是 13.221 ms。Rich 面板的 `Learner` 也是一个 iter 内全部 learner update 的合计，`Iter Wall` 才是包含 runner 协调在内的完整迭代墙钟时间。
+
+最后 500 条默认已排除 compile 冷启动；需要改变窗口时使用 `--summary-last N`，需要额外排除开头样本时使用 `--skip-first N`。训练日志保存在 `results/physical_training/<timestamp>/`，可用 TensorBoard 查看。
 
 完整命令和排错说明见 [REPRODUCE.md](REPRODUCE.md)，结果解释见 [REPORT.md](REPORT.md)。

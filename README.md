@@ -16,10 +16,12 @@ For an end-to-end run, execute the benchmark from a UniLab environment:
 cd /path/to/UniLab
 uv run /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_training.py \
   --unilab-root /path/to/UniLab \
-  --backend mujoco --iterations 20 --num-envs 256 \
+  --backend mujoco --num-envs 256 \
   --output /path/to/UniLab-FlashSAC-Optmization/results/physical_training/summary.json
 ```
 
-The child process keeps the production Rich dashboard visible in real time. The JSON contains per-iteration learner, collector, total iteration, and reward values plus mean, median, p90, and p95. Use `--skip-first 4` to exclude compile warm-up from the summary while retaining all rows in `rows_all`.
+The default run is 1000 iterations and summarizes the last 500 timing rows with mean, median, p90, and p95 while retaining all rows in `rows_all`. The child process keeps the production Rich dashboard visible in real time. Use `--summary-last N` to change the window or `--skip-first N` for an additional leading exclusion.
+
+With the defaults, one iteration contains two critic updates plus one actor and one temperature update. The reported 4.873 ms learner microbenchmark is one complete learner round, not one update; the comparable pre-optimization result is 13.221 ms.
 
 See [REPRODUCE.md](REPRODUCE.md) for setup and troubleshooting, and [REPORT.md](REPORT.md) for the concise Chinese report.

@@ -32,6 +32,10 @@ RTX 4090 learner 微基准（150 个稳态 round 池化）：
 
 输出 JSON 同时包含逐轮数据和 mean/median/p90/p95。`--skip-first N` 只影响统计样本，不删除原始 `rows_all`。
 
+脚本默认执行 1000 iter，并统计最后 500 条 timing。默认 `updates_per_step=2`、`policy_frequency=2`，所以每个 iter 有 2 次 critic update、1 次 actor update 和 1 次 temperature update。`learner_train_ms` 是该 iter 全部 learner update 的总时间，`iter_ms` 是完整迭代墙钟时间。
+
 ## 解释
 
 compile 首轮可能很慢，这是 Inductor 编译和 CUDA Graph capture 的冷启动，不应与稳态混在一起。collector 和 learner 在 double-buffer 中并行/重叠，所以总轮时间通常小于两者相加。正式比较至少应固定 backend、task、num_envs、batch、updates_per_step，并重复多次。
+
+性能表里的 4.873 ms 同样是一整个 learner round，而不是单次 update；对应优化前是 13.221 ms/round。两者都是纯 learner 微基准，不能直接解释为真实物理训练的端到端 iter 时间。

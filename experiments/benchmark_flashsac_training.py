@@ -10,7 +10,7 @@ Example (MuJoCo, run from a UniLab environment):
 
     uv run /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_training.py \
         --unilab-root /path/to/UniLab \
-        --backend mujoco --iterations 20 --num-envs 256
+        --backend mujoco --num-envs 256
 
 The same command works with ``--backend motrix`` when the Motrix extra is
 installed.  The project's own ``src/uni_rl`` is used by default; use
@@ -106,7 +106,12 @@ def _by_step(samples: Sequence[Scalar]) -> dict[int, float]:
     return {sample.step: sample.value for sample in samples}
 
 
-def parse_timing(run_dir: Path, *, skip_first: int = 0) -> dict[str, object]:
+def parse_timing(
+    run_dir: Path,
+    *,
+    skip_first: int = 0,
+    summary_last: int | None = 500,
+) -> dict[str, object]:
     """Read per-iteration learner, collector, wall and reward timings."""
     learner = _read_scalars(run_dir, "timing/learner_train_ms")
     collector = _read_scalars(run_dir, "perf/collector_cycle_ms")
@@ -143,7 +148,10 @@ def parse_timing(run_dir: Path, *, skip_first: int = 0) -> dict[str, object]:
     ]
     if skip_first < 0:
         raise ValueError("skip_first must be non-negative")
-    rows = rows_all[skip_first:]
+    if summary_last is not None and summary_last <= 0:
+        raise ValueError("summary_last must be positive")
+    eligible_rows = rows_all[skip_first:]
+    rows = eligible_rows[-summary_last:] if summary_last is not None else eligible_rows
     if not rows:
         raise RuntimeError(
             f"learner and collector timing series have fewer than {skip_first + 1} common steps"
@@ -152,6 +160,9 @@ def parse_timing(run_dir: Path, *, skip_first: int = 0) -> dict[str, object]:
         "num_samples": len(rows),
         "num_samples_all": len(rows_all),
         "skip_first": skip_first,
+        "summary_last": summary_last,
+        "summary_first_step": rows[0]["step"],
+        "summary_last_step": rows[-1]["step"],
         "rows_all": rows_all,
         "learner_train_ms": summarize(row["learner_train_ms"] for row in rows),
         "collector_cycle_ms": summarize(row["collector_cycle_ms"] for row in rows),
@@ -180,6 +191,7 @@ def _command(args: argparse.Namespace, run_dir: Path) -> list[str]:
         f"algo.replay_buffer_n={args.replay_buffer_n}",
         f"algo.learning_starts={args.learning_starts}",
         f"algo.updates_per_step={args.updates_per_step}",
+        f"algo.policy_frequency={args.policy_frequency}",
         "algo.save_interval=1000000",
         f"algo.algo_params.use_compile={str(args.compile).lower()}",
         f"algo.algo_params.compile_full_objectives={str(args.compile).lower()}",
@@ -247,6 +259,21 @@ def _run(command: Sequence[str], *, env: dict[str, str]) -> None:
 
 
 def _print_report(report: dict[str, object]) -> None:
+    training_config = report["training_config"]
+    assert isinstance(training_config, dict)
+    print("\nTraining/update configuration:")
+    print(f"  configured iterations: {int(training_config['iterations'])}")
+    print(
+        "  summary window: last "
+        f"{int(report['num_samples'])} timing rows "
+        f"(steps {int(report['summary_first_step'])}..{int(report['summary_last_step'])})"
+    )
+    print(
+        "  updates per iteration: "
+        f"{int(training_config['critic_updates_per_iteration'])} critic + "
+        f"{int(training_config['actor_updates_per_iteration'])} actor + "
+        f"{int(training_config['temperature_updates_per_iteration'])} temperature"
+    )
     rows = report["rows"]
     assert isinstance(rows, list)
     print("\nPer-iteration timing (ms):")
@@ -276,12 +303,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("mujoco", "motrix"), default="mujoco")
     parser.add_argument("--task", default="g1_walk_flat")
-    parser.add_argument("--iterations", type=int, default=20)
+    parser.add_argument("--iterations", type=int, default=1000)
     parser.add_argument("--num-envs", type=int, default=256)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--replay-buffer-n", type=int, default=32)
     parser.add_argument("--learning-starts", type=int, default=8)
     parser.add_argument("--updates-per-step", type=int, default=2)
+    parser.add_argument("--policy-frequency", type=int, default=2)
     parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--run-dir", type=Path, default=None)
     parser.add_argument(
@@ -296,7 +324,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--skip-first",
         type=int,
         default=0,
-        help="Exclude the first N common timing rows from summary statistics (compile warm-up).",
+        help="Exclude the first N timing rows before selecting the summary window.",
+    )
+    parser.add_argument(
+        "--summary-last",
+        type=int,
+        default=500,
+        help="Summarize only the last N eligible timing rows (default: 500).",
     )
     parser.add_argument("--uni-rl-src", type=Path, default=None)
     parser.add_argument("--extra-override", action="append", default=[])
@@ -306,6 +340,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     global ROOT_DIR, TRAIN_SCRIPT
     args = parse_args(argv)
+    if args.iterations <= 0:
+        raise ValueError("--iterations must be positive")
+    if args.updates_per_step <= 0:
+        raise ValueError("--updates-per-step must be positive")
+    if args.policy_frequency <= 0:
+        raise ValueError("--policy-frequency must be positive")
+    if args.skip_first < 0:
+        raise ValueError("--skip-first must be non-negative")
+    if args.summary_last <= 0:
+        raise ValueError("--summary-last must be positive")
     unilab_root = (
         args.unilab_root.resolve()
         if args.unilab_root is not None
@@ -330,16 +374,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     env["PYTHONPATH"] = os.pathsep.join(source_paths + [env.get("PYTHONPATH", "")])
     command = _command(args, run_dir)
     _run(command, env=env)
-    report = parse_timing(run_dir, skip_first=args.skip_first)
+    report = parse_timing(
+        run_dir,
+        skip_first=args.skip_first,
+        summary_last=args.summary_last,
+    )
+    actor_updates = (args.updates_per_step - 1) // args.policy_frequency + 1
+    training_config = {
+        "iterations": args.iterations,
+        "summary_last": args.summary_last,
+        "updates_per_step": args.updates_per_step,
+        "policy_frequency": args.policy_frequency,
+        "critic_updates_per_iteration": args.updates_per_step,
+        "actor_updates_per_iteration": actor_updates,
+        "temperature_updates_per_iteration": actor_updates,
+    }
     payload = {
         "command": command,
         "run_dir": str(run_dir),
         "backend": args.backend,
         "task": args.task,
         "device": get_device_info_dict(),
+        "training_config": training_config,
         **report,
     }
-    _print_report(report)
+    _print_report(payload)
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
