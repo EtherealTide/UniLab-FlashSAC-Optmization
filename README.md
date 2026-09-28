@@ -45,19 +45,6 @@ RTX 4090、G1 Walk Flat、256 env、batch 256、1000 iter，统计最后 500 ite
 
 这里的 `learner` 是一个 iter 内全部 update 的总耗时，不是单次 critic 或 actor update。`iter` 是完整 runner iteration 墙钟时间。collector 与 learner 采用 double buffer，会发生重叠，因此 `iter != learner + collector`。
 
-### Learner 微基准
-
-BF16、batch 2048、3 次独立运行、每次 50 个稳态 round；下表为 150 个样本的池化统计：
-
-| update 口径 | 路径 | mean | median | p90 | p95 |
-|---|---|---:|---:|---:|---:|
-| 1 actor / 2 critic | deferred eager | 13.221 | 13.201 | 13.724 | 13.863 |
-| 1 actor / 2 critic | full-objective compile | **4.873** | **4.916** | **5.368** | **5.764** |
-| 1 actor / 2 critic | full compile + manual Graph | **4.455** | **4.289** | **4.957** | **5.000** |
-| 4 actor / 8 critic | deferred eager | 49.960 | 50.350 | 51.003 | 51.133 |
-| 4 actor / 8 critic | full-objective compile | **17.472** | **17.475** | **17.513** | **17.519** |
-| 4 actor / 8 critic | full compile + manual Graph | **16.706** | **16.676** | **16.711** | **16.792** |
-
 update 数量扩大 4 倍时，真实训练的优化后 learner mean 从 4.323 ms 增加到 13.304 ms，只增加 **3.08 倍**。原因是每 iter 固定开销只支付一次，并且 metrics D2H 和最终 CUDA synchronize 也只做一次；详细定量分析见优化报告。
 
 ## 复现实验
@@ -81,45 +68,7 @@ uv run --project /path/to/UniLab --no-sync -- python -c \
 
 不要直接执行 `uv run /path/to/UniLab-FlashSAC-Optmization/...`。这种写法可能让 uv 选择优化仓库自己的 `.venv`，导致 `ModuleNotFoundError: unisim`。下面所有命令都显式使用 UniLab 项目环境。
 
-### 2. Learner 微基准
-
-1 actor / 2 critic：
-
-```bash
-cd /path/to/UniLab-FlashSAC-Optmization
-uv run --project /path/to/UniLab --no-sync -- python \
-  experiments/benchmark_flash_sac.py \
-  --device cuda --updates 2 --policy-frequency 2 \
-  --rounds 50 --warmup 10 --batch-size 2048 \
-  --use-amp --amp-dtype bf16 --matmul-precision highest \
-  --output results/reproduce_u2_run1.json
-```
-
-4 actor / 8 critic：
-
-```bash
-uv run --project /path/to/UniLab --no-sync -- python \
-  experiments/benchmark_flash_sac.py \
-  --device cuda --updates 8 --policy-frequency 2 \
-  --rounds 50 --warmup 10 --batch-size 2048 \
-  --use-amp --amp-dtype bf16 --matmul-precision highest \
-  --output results/reproduce_u8_run1.json
-```
-
-每种配置独立执行 3 次，把输出名改成 `run1`、`run2`、`run3`。随后汇总：
-
-```bash
-uv run --project /path/to/UniLab --no-sync -- python \
-  experiments/summarize_results.py \
-  results/reproduce_u8_run1.json \
-  results/reproduce_u8_run2.json \
-  results/reproduce_u8_run3.json \
-  --output results/reproduce_u8_summary.json
-```
-
-脚本会依次测量 eager、deferred eager、loss-only compile、full-objective compile、manual Graph，以及 compile + manual Graph 组合路径。
-
-### 3. 真实物理训练
+### 2. 真实物理训练
 
 下面命令真正调用 UniLab 的 `train_flashsac.py` 并创建 MuJoCo 环境，同时保留生产 Rich 实时面板。默认训练 1000 iter，统计最后 500 iter：
 
@@ -151,11 +100,9 @@ uv run --project /path/to/UniLab --no-sync -- python \
 - `learner_train_ms`、`collector_cycle_ms`、`iter_ms`：mean、median、p90、p95；
 - `training_config`：每 iter 的 critic、actor、temperature update 数量。
 
-### 4. 数值和稳定性检查
+### 3. 数值和稳定性检查
 
 ```bash
 uv run --project /path/to/UniLab --no-sync -- python experiments/validate_numerics.py
 uv run --project /path/to/UniLab --no-sync -- python experiments/validate_replay_stability.py
 ```
-
-原始微基准结果保存在 `results/production_bf16_samples_*.json` 和 `results/production_bf16_u8_samples_*.json`。

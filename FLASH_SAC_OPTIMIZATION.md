@@ -98,23 +98,9 @@ CUDA Graph replay 会复用静态存储。如果直接返回 capture 内临时 t
 
 ## 5. 实验环境与方法
 
-### 5.1 Learner 微基准
+本报告只采用包含 collector、replay 和物理引擎的真实训练数据。
 
-- GPU：NVIDIA GeForce RTX 4090；
-- PyTorch：2.8.0+cu128；
-- dtype：BF16 AMP；
-- matmul precision：`highest`；
-- batch：2048；
-- actor：hidden 128，2 blocks；
-- critic：hidden 256，2 blocks，101 atoms；
-- obs / critic obs / action：98 / 101 / 29；
-- 每条路径 warmup 10 round，计时 50 round；
-- 每种 update 口径独立运行 3 次；
-- 表中统计池化三个 run 的 150 个稳态样本。
-
-每个 microbenchmark round 对应完整 learner 更新组合，并在末尾执行 CUDA synchronize。
-
-### 5.2 真实物理训练
+### 5.1 真实物理训练
 
 - GPU：NVIDIA GeForce RTX 4090；
 - task/backend：G1 Walk Flat / MuJoCo；
@@ -129,43 +115,9 @@ CUDA Graph replay 会复用静态存储。如果直接返回 capture 内临时 t
 
 2-update 的 deferred eager 和 compile 各有 500 个统计样本。8-update deferred eager 有 500 个样本；8-update compile 使用两次独立 1000-iter 训练的最后 500 iter，合计池化 1000 个样本。真实训练的 `--no-compile` 对照仍保留 deferred metrics、critic 冻结等非 compile 优化，用于隔离 full-objective compile 的增益；它不是未打任何补丁的历史版本。
 
-## 6. Learner 微基准详细数据
+## 6. 真实 MuJoCo 训练详细数据
 
-### 6.1 1 actor / 2 critic
-
-单位为 ms/round，`n=150`：
-
-| 路径 | mean | median | p90 | p95 |
-|---|---:|---:|---:|---:|
-| eager sync | 13.821 | 13.833 | 14.342 | 14.532 |
-| deferred eager | 13.221 | 13.201 | 13.724 | 13.863 |
-| loss-only compile | 12.008 | 12.009 | 12.357 | 12.574 |
-| full-objective compile | **4.873** | **4.916** | **5.368** | **5.764** |
-| manual Graph | 10.661 | 10.840 | 11.119 | 11.160 |
-| loss compile + manual Graph | 10.635 | 10.669 | 11.105 | 11.173 |
-| full compile + manual Graph | **4.455** | **4.289** | **4.957** | **5.000** |
-
-full-objective compile 相对 deferred eager：平均耗时降低 63.1%，加速 2.71 倍。叠加手工 Graph 后降低 66.3%，加速 2.97 倍。
-
-### 6.2 4 actor / 8 critic
-
-单位为 ms/round，`n=150`：
-
-| 路径 | mean | median | p90 | p95 |
-|---|---:|---:|---:|---:|
-| eager sync | 52.818 | 52.968 | 53.743 | 53.892 |
-| deferred eager | 49.960 | 50.350 | 51.003 | 51.133 |
-| loss-only compile | 43.850 | 43.919 | 44.119 | 44.380 |
-| full-objective compile | **17.472** | **17.475** | **17.513** | **17.519** |
-| manual Graph | 40.168 | 40.145 | 40.255 | 40.310 |
-| loss compile + manual Graph | 40.077 | 40.038 | 40.157 | 40.309 |
-| full compile + manual Graph | **16.706** | **16.676** | **16.711** | **16.792** |
-
-full-objective compile 相对 deferred eager：平均耗时降低 65.0%，加速 2.86 倍。叠加手工 Graph 后降低 66.6%，加速 2.99 倍。
-
-## 7. 真实 MuJoCo 训练详细数据
-
-### 7.1 Learner 时间
+### 6.1 Learner 时间
 
 单位为 ms/iter：
 
@@ -176,7 +128,7 @@ full-objective compile 相对 deferred eager：平均耗时降低 65.0%，加速
 | 4 actor / 8 critic | deferred eager | 500 | 36.885 | 36.183 | 39.010 | 40.171 |
 | 4 actor / 8 critic | full-objective compile | 1000 | **13.304** | **13.145** | **14.344** | **14.888** |
 
-### 7.2 Collector cycle
+### 6.2 Collector cycle
 
 单位为 ms/cycle：
 
@@ -189,7 +141,7 @@ full-objective compile 相对 deferred eager：平均耗时降低 65.0%，加速
 
 collector 本身没有执行 optimizer update，但它会等待 learner inference；learner 更快后，collector cycle 的等待时间也会降低。
 
-### 7.3 完整 iteration 墙钟时间
+### 6.3 完整 iteration 墙钟时间
 
 单位为 ms/iter：
 
@@ -202,7 +154,7 @@ collector 本身没有执行 optimizer update，但它会等待 learner inferenc
 
 端到端 iter mean 分别降低 51.5% 和 62.3%。
 
-## 8. 为什么 update 数乘 4，时间只有约 3 倍
+## 7. 为什么 update 数乘 4，时间只有约 3 倍
 
 从 1 actor / 2 critic 变成 4 actor / 8 critic 后，critic、actor、temperature 和 target update 的数量都严格增加到 4 倍；算法没有少做 update。但一次 iteration 的时间可以近似写成：
 
@@ -238,24 +190,18 @@ F ≈ (4 × T2 - T8) / 3 ≈ 1.329 ms/iter
 |---|---:|---:|---:|
 | 真实训练 deferred eager learner | 10.118 | 36.885 | 3.65× |
 | 真实训练 full-compile learner | 4.323 | 13.304 | **3.08×** |
-| 微基准 full-objective compile | 4.873 | 17.472 | 3.59× |
 | 真实训练 full-compile iter wall | 5.341 | 14.235 | 2.67× |
 
 优化后的单次 update 计算更短，固定成本在 2-update 总时间中占比更高，因此从 2 增至 8 时总时间倍率反而更接近 3，而不是 4。这是固定开销被摊薄的结果，不代表 8-update 少执行了训练步骤。
 
-## 9. 选择建议与限制
+## 8. 选择建议与限制
 
-- 默认选择 full-objective compile：速度接近最优，shape 和 graph 生命周期约束较少。
-- 固定 batch/shape 且追求最后 4%–9% learner 性能时，可评估 full compile + manual Graph。
-- 不建议只开手工 Graph：没有完整 objective 融合时，8-update mean 仍为 40.168 ms，明显慢于 full-objective compile 的 17.472 ms。
+- 默认选择 full-objective compile：本次真实物理训练验证采用的就是这条路径，且无需管理外层手工 Graph 生命周期。
+- 手工 CUDA Graph 有固定 shape 和复杂生命周期约束，未纳入本次生产训练对照，因此不提供性能结论。
 - compile 首轮包含 Inductor 编译和 graph capture 冷启动，必须与稳态窗口分开。
-- 微基准只隔离 learner；生产判断应优先看真实物理训练的 `iter_ms`。
+- 性能判断以真实物理训练的 `iter_ms` 为准。
 - 本报告不包含另行研究的 Triton categorical-target kernel。
 
-## 10. 数据文件
+## 9. 数据文件
 
-- 2-update 微基准：`results/production_bf16_samples_run{1,2,3}.json`；
-- 2-update 聚合：`results/production_bf16_samples_summary.json`；
-- 8-update 微基准：`results/production_bf16_u8_samples_run{1,2,3}.json`；
-- 8-update 聚合：`results/production_bf16_u8_samples_summary.json`；
 - 真实训练对比摘要：`results/physical_training_comparison.json`。
