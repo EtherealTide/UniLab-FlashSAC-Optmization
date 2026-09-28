@@ -59,6 +59,12 @@ policy_frequency = 2
 
 因此每个训练 iter 包含 2 次 critic update、1 次 actor update 和 1 次 temperature update。`learner_train_ms`/面板中的 `Learner` 是这些 learner update 在一个 iter 内的合计；`iter_ms`/`Iter Wall` 是完整 iteration 墙钟时间。微基准表中的 4.873 ms 也是相同 update 结构下的一整个 learner round，优化前同口径为 13.221 ms，不是 4 ms/次 update。
 
+以上是本基准脚本显式传给 Hydra 的值，会覆盖任务 YAML。当前 `g1_walk_flat/mujoco` 的任务 YAML 自身为 `updates_per_step=8`；直接使用任务配置时，每 iter 是 8 次 critic、4 次 actor 和 4 次 temperature update。要让本工具采用这一口径，传入：
+
+```bash
+... --updates-per-step 8 --policy-frequency 2
+```
+
 ## 4. 统计窗口和编译冷启动
 
 默认的最后 500 iter 窗口已经避开启动阶段。可以显式改变窗口：

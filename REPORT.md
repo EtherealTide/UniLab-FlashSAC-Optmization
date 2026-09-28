@@ -32,6 +32,8 @@ uv run /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_train
 
 脚本默认同样是 `updates_per_step=2`、`policy_frequency=2`。Rich 面板和 JSON 中的 `learner_train_ms` 是每个 iter 内 2 次 critic、1 次 actor 和 1 次 temperature update 的合计，不是单次 update；`iter_ms` 才是完整 iteration 墙钟时间。总 iteration 不等于 learner 加 collector，因为 double-buffer runner 会让两者重叠。
 
+基准脚本会显式覆盖 update 数；当前 `g1_walk_flat/mujoco` 任务 YAML 自身配置的是 `updates_per_step=8`，直接使用该配置时每 iter 是 8 次 critic、4 次 actor/temperature，耗时不能与 2-update 结果直接比较。
+
 `--summary-last 500` 控制末尾统计窗口，`--skip-first N` 可在选取末尾窗口前额外排除开头样本。正式的真实物理性能结论应同时跑优化前、优化后各 1000 iter；13.221 → 4.873 ms 是隔离 learner 的微基准结果，不能冒充端到端物理训练结果。
 
 本机短跑已确认真实 MuJoCo 链路能够输出实时训练面板和 timing。短跑样本只用于验证工具，不替代正式多次重复实验。
