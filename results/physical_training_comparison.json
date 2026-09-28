@@ -1,0 +1,51 @@
+{
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "torch": "2.8.0+cu128",
+    "task": "g1_walk_flat",
+    "backend": "mujoco",
+    "num_envs": 256,
+    "batch_size": 256,
+    "iterations": 1000,
+    "summary_last": 500,
+    "policy_frequency": 2
+  },
+  "cases": {
+    "deferred_eager_u2": {
+      "runs": 1,
+      "samples": 500,
+      "critic_updates_per_iteration": 2,
+      "actor_updates_per_iteration": 1,
+      "learner_train_ms": {"mean": 10.1176964969635, "median": 9.964641094207764, "p90": 10.760092830657959, "p95": 11.092063522338867},
+      "collector_cycle_ms": {"mean": 12.144055576324464, "median": 11.989501953125, "p90": 12.826915264129639, "p95": 13.346615743637084},
+      "iter_ms": {"mean": 11.008660802841186, "median": 10.850106716156006, "p90": 11.680866050720216, "p95": 12.032386112213134}
+    },
+    "full_objective_compile_u2": {
+      "runs": 1,
+      "samples": 500,
+      "critic_updates_per_iteration": 2,
+      "actor_updates_per_iteration": 1,
+      "learner_train_ms": {"mean": 4.322741216659546, "median": 4.3974769115448, "p90": 4.874176168441773, "p95": 5.088171648979187},
+      "collector_cycle_ms": {"mean": 6.838649090766907, "median": 6.776252031326294, "p90": 7.5978821277618405, "p95": 7.921776843070982},
+      "iter_ms": {"mean": 5.341370105743408, "median": 5.390948057174683, "p90": 5.908464956283569, "p95": 6.213442492485045}
+    },
+    "deferred_eager_u8": {
+      "runs": 1,
+      "samples": 500,
+      "critic_updates_per_iteration": 8,
+      "actor_updates_per_iteration": 4,
+      "learner_train_ms": {"mean": 36.88504587554932, "median": 36.18331527709961, "p90": 39.009738540649415, "p95": 40.17127914428711},
+      "collector_cycle_ms": {"mean": 38.631525115966795, "median": 38.097368240356445, "p90": 40.87524185180664, "p95": 42.274892234802245},
+      "iter_ms": {"mean": 37.760300674438476, "median": 37.06023025512695, "p90": 39.93460807800293, "p95": 41.04106693267822}
+    },
+    "full_objective_compile_u8": {
+      "runs": 2,
+      "samples": 1000,
+      "critic_updates_per_iteration": 8,
+      "actor_updates_per_iteration": 4,
+      "learner_train_ms": {"mean": 13.304032724380493, "median": 13.145021915435791, "p90": 14.344214725494385, "p95": 14.887875699996949},
+      "collector_cycle_ms": {"mean": 15.322932291984559, "median": 15.076830863952637, "p90": 16.544263458251955, "p95": 17.20703544616699},
+      "iter_ms": {"mean": 14.235315766334534, "median": 14.06440544128418, "p90": 15.277618885040283, "p95": 15.88622317314148}
+    }
+  }
+}
