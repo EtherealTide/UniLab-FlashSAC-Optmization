@@ -133,6 +133,82 @@ def test_flashsac_update_cycle_rejects_compatibility_fallback() -> None:
         )
 
 
+def test_flashsac_update_cycle_eager_fallback_after_capture_failure() -> None:
+    """Once capture has failed, update_cycle runs the core eagerly (no graph)."""
+    torch.manual_seed(123)
+    learner = _make_small_learner()
+    learner._compile_full_update_cycle = True
+    learner._update_cycle_capture_failed = True
+    torch.manual_seed(123)
+    reference = _make_small_learner()
+    large_batch = {
+        key: value.repeat(2, *([1] * (value.ndim - 1)))
+        for key, value in _make_small_batch(8).items()
+    }
+    rng_state = torch.random.get_rng_state()
+
+    learner.update_cycle(
+        large_batch,
+        updates_per_step=2,
+        policy_frequency=1,
+        target_frequency=1,
+        policy_before_critic=False,
+    )
+
+    assert learner._update_cycle_graph is None
+    assert learner._pending_cycle_metric_values is not None
+    torch.random.set_rng_state(rng_state)
+    reference._run_update_cycle_core(
+        large_batch,
+        updates_per_step=2,
+        policy_frequency=1,
+        target_frequency=1,
+        policy_before_critic=False,
+    )
+    for module_name in ("actor", "critic", "target_critic", "temperature"):
+        torch.testing.assert_close(
+            getattr(learner, module_name).state_dict(),
+            getattr(reference, module_name).state_dict(),
+        )
+    assert learner.critic_scheduler.last_epoch == reference.critic_scheduler.last_epoch
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA capture failure path required")
+def test_flashsac_capture_failure_warns_and_falls_back(monkeypatch) -> None:
+    """A failed CUDA graph capture warns once and completes the cycle eagerly."""
+
+    class _FailingGraph:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> None:
+            raise torch.AcceleratorError("simulated capture failure")
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+    monkeypatch.setattr(torch.cuda, "graph", _FailingGraph)
+    learner = _make_small_learner(device="cuda:0")
+    learner._compile_full_update_cycle = True
+    large_batch = {
+        key: value.repeat(2, *([1] * (value.ndim - 1))).cuda()
+        for key, value in _make_small_batch(8).items()
+    }
+
+    with pytest.warns(UserWarning, match="falling back to eager"):
+        learner.update_cycle(
+            large_batch,
+            updates_per_step=2,
+            policy_frequency=1,
+            target_frequency=1,
+            policy_before_critic=False,
+        )
+
+    assert learner._update_cycle_capture_failed is True
+    assert learner._update_cycle_graph is None
+    assert learner._pending_cycle_metric_values is not None
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA runtime selection required")
 def test_flashsac_nvidia_cuda_ignores_legacy_compile_opt_out(monkeypatch) -> None:
     monkeypatch.setattr(
