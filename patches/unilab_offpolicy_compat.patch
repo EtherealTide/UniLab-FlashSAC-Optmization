@@ -1,0 +1,21 @@
+diff --git a/src/unilab/scripts/train_offpolicy.py b/src/unilab/scripts/train_offpolicy.py
+--- a/src/unilab/scripts/train_offpolicy.py
++++ b/src/unilab/scripts/train_offpolicy.py
+@@
++import inspect
+@@
+-    collector_cpu_ids = resolve_collector_cpu_ids(
+-        dp_world_size,
+-        dp_rank,
+-        None,
+-        explicit=explicit_cpu_ids,
+-        device_ids=dp_devices,
+-    )
++    # ``device_ids`` exists in newer unilab-rl releases only.  Keep the
++    # ordinary single-rank command compatible with installed 1.4.x wheels.
++    collector_cpu_kwargs: dict[str, Any] = {"explicit": explicit_cpu_ids}
++    if "device_ids" in inspect.signature(resolve_collector_cpu_ids).parameters:
++        collector_cpu_kwargs["device_ids"] = dp_devices
++    collector_cpu_ids = resolve_collector_cpu_ids(
++        dp_world_size, dp_rank, None, **collector_cpu_kwargs
++    )
