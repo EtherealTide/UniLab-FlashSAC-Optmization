@@ -1,0 +1,40 @@
+{
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "steps": 1000,
+  "actor_updates": 500,
+  "batch_size": 2048,
+  "policy_frequency": 2,
+  "allocated_after_capture_bytes": 103634432,
+  "allocated_after_replays_bytes": 103634432,
+  "reserved_after_capture_bytes": 369098752,
+  "reserved_after_replays_bytes": 369098752,
+  "peak_allocated_during_replays_bytes": 103643136,
+  "critic_optimizer_steps": [
+    1000
+  ],
+  "actor_optimizer_steps": [
+    500
+  ],
+  "temperature_optimizer_steps": [
+    500
+  ],
+  "final_metrics": {
+    "critic_loss": 4.418014049530029,
+    "reward_scale_std": 1.0,
+    "actor_loss": -0.29768434166908264,
+    "actor_entropy": -9.222053527832031,
+    "temperature": 0.009877866134047508,
+    "temperature_loss": 0.04588474705815315
+  },
+  "checks": {
+    "metrics_finite": true,
+    "metrics_not_overwritten": true,
+    "critic_step_count": true,
+    "actor_step_count": true,
+    "temperature_step_count": true,
+    "allocated_memory_stable": true,
+    "reserved_memory_stable": true
+  },
+  "passed": true
+}

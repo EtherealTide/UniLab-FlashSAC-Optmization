@@ -655,6 +655,7 @@ class FlashSACLearner(LearnerBoilerplateMixin):
         batch: dict[str, torch.Tensor],
         *,
         read_metrics: bool = True,
+        store_cycle_metrics: bool = True,
     ) -> dict[str, float]:
         obs = batch["obs"].to(self.device)
         actions = batch["actions"].to(self.device)
@@ -693,6 +694,8 @@ class FlashSACLearner(LearnerBoilerplateMixin):
             self.critic_scheduler.step()
         self.critic.normalize_parameters()
 
+        if not read_metrics and not store_cycle_metrics:
+            return {}
         if not read_metrics:
             critic_tensors: tuple[torch.Tensor, ...] = (critic_loss,)
             if self.reward_normalizer is not None:
@@ -716,6 +719,7 @@ class FlashSACLearner(LearnerBoilerplateMixin):
         batch: dict[str, torch.Tensor],
         *,
         read_metrics: bool = True,
+        store_cycle_metrics: bool = True,
     ) -> dict[str, float]:
         obs = batch["obs"].to(self.device)
         next_obs = batch["next_obs"].to(self.device)
@@ -765,6 +769,8 @@ class FlashSACLearner(LearnerBoilerplateMixin):
 
         post_update_temperature = self.temperature()
         actor_metric_tensors = (actor_loss, entropy, post_update_temperature, temp_loss)
+        if not read_metrics and not store_cycle_metrics:
+            return {}
         if not read_metrics:
             # Keep a private device-side snapshot.  The cycle-end drain below
             # performs the only D2H read, after all compiled replays finish.
@@ -847,16 +853,32 @@ class FlashSACLearner(LearnerBoilerplateMixin):
         self._pending_cycle_metric_values = None
         self._update_cycle_lr_cursors = {}
         batch_size = int(next(iter(large_batch.values())).shape[0]) // updates_per_step
+        last_actor_update = max(
+            (idx for idx in range(updates_per_step) if idx % policy_frequency == 0),
+            default=-1,
+        )
         for update_idx in range(updates_per_step):
             start = update_idx * batch_size
             end = start + batch_size
             batch = {key: value[start:end] for key, value in large_batch.items()}
             do_actor_update = update_idx % policy_frequency == 0
             if policy_before_critic and do_actor_update:
-                self.update_actor(batch, read_metrics=False)
-            self.update_critic(batch, read_metrics=False)
+                self.update_actor(
+                    batch,
+                    read_metrics=False,
+                    store_cycle_metrics=update_idx == last_actor_update,
+                )
+            self.update_critic(
+                batch,
+                read_metrics=False,
+                store_cycle_metrics=update_idx == updates_per_step - 1,
+            )
             if not policy_before_critic and do_actor_update:
-                self.update_actor(batch, read_metrics=False)
+                self.update_actor(
+                    batch,
+                    read_metrics=False,
+                    store_cycle_metrics=update_idx == last_actor_update,
+                )
             if update_idx % target_frequency == 0:
                 self.soft_update_target()
 

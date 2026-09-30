@@ -1,149 +1,80 @@
-# unilab-rl
+# UniLab FlashSAC 默认配置优化
 
-[![PyPI](https://img.shields.io/pypi/v/unilab-rl)](https://pypi.org/project/unilab-rl/)
-[![CI](https://github.com/unilabsim/unilab_rl/actions/workflows/ci.yml/badge.svg)](https://github.com/unilabsim/unilab_rl/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+本仓库记录 FlashSAC 在 UniLab 真实 MuJoCo 训练中的性能分析、代码修改和可复现实验。本轮唯一验收口径是 Hydra owner config 的默认参数，测试脚本不覆盖它们：
 
-English | [简体中文](README_zh.md)
+```text
+num_envs=2048, batch_size=8192
+updates_per_step=8, policy_frequency=4
+```
 
-Reinforcement learning algorithms and asynchronous runtimes extracted from
-[UniLab](https://github.com/unilabsim/UniLab), packaged as a standalone,
-simulator-agnostic library.
+每个 iteration 执行 **8 critic + 2 actor + 2 temperature + 8 target soft update**。
 
-- Distribution name: `unilab-rl`
-- Import namespace: `uni_rl`
-- Repository: [unilabsim/unilab_rl](https://github.com/unilabsim/unilab_rl)
+## 结论
 
-## Relationship with UniLab
+- 最新 `unilab_rl` 的 NVIDIA 路径已使用 full-objective Inductor 编译，再用外层 CUDA Graph 捕获完整 update cycle。
+- 本轮去掉前 7 次 critic 和第 1 次 actor 最终会被覆盖的 metrics stack，只保留整轮最后一组指标。
+- 基准脚本不再隐式改成 256 env / batch 256，而是从 `run_config.json` 回读实际配置，并支持新旧 runner timing tag。
+- 尝试过“仅计算 actor/critic 实际使用的 predictor 半区”；真实训练反而慢约 1 ms，已撤销。
 
-`uni_rl` is the RL algorithm and async-runtime layer of the UniLab project,
-split out into its own package. [UniLab](https://github.com/unilabsim/UniLab)
-remains the consumer side: it owns the physics backends, task suites, and
-training entrypoints, and injects environments into `uni_rl` through
-`uni_rl.env_contract.EnvFactory`. `uni_rl` never imports `unilab` / `unisim`
-and never constructs environments itself, so any vectorized environment
-satisfying the contract — including simulators outside UniLab — can drive the
-algorithms in this package.
+RTX 4090、MuJoCo、1000 iter，统计最后 500 iter：
 
-UniLab consumes `uni_rl` as an optional extra (`unilab[uni_rl]`) for APPO,
-off-policy algorithms, and multi-GPU data-parallel PPO launches; its
-single-process PPO path drives upstream rsl_rl directly. Install `unilab-rl`
-directly when you want to reuse its algorithms and async runtime with your own
-environment stack.
+| 指标 | mean | median | p90 | p95 |
+|---|---:|---:|---:|---:|
+| learner / ms | 55.886 | 55.898 | 56.488 | 56.653 |
+| collector cycle / ms | 57.804 | 57.797 | 58.602 | 58.927 |
+| iteration wall / ms | 57.550 | 57.546 | 58.192 | 58.311 |
 
-> Naming note: the originally intended distribution name `uni-rl` is
-> unregistrable on PyPI because it ultranormalizes to the existing `unirl`
-> project. The distribution is therefore published as `unilab-rl`; the import
-> namespace remains `uni_rl` as designed.
+**20 ms 目标未达成。** 历史上“约 24 ms”的日志是 `4096 env / batch 2048 / 8 critic / 4 actor`，不是本轮 `batch 8192 / 8 critic / 2 actor` 口径。batch 增大 4 倍后，critic 的大型矩阵乘、BatchNorm、backward 和 Adam 成为主要开销，单纯减少 launch/D2H 不可能再带来 2.8 倍加速。详见 [优化报告](FLASH_SAC_OPTIMIZATION.md)。
 
-## Contents
+## 复现
 
-- **Async PPO (APPO)**: native collector/learner multiprocess implementation
-  (actor/critic networks built on
-  [rsl_rl](https://github.com/leggedrobotics/rsl_rl) model classes)
-- **Off-policy**: FastSAC, FlashSAC, and WarpSAC with double-buffer async runners
-- **Runtime infrastructure**: shared-memory rollout/replay buffers, replay
-  pipelines, data-parallel gradient sync, memory budgeting, tensorboard/wandb
-  training loggers, and a trace recorder
+假设目录为：
 
-## Layout
+```text
+/path/to/UniLab
+/path/to/UniLab-FlashSAC-Optmization
+```
 
-- `uni_rl.algos.*` — the algorithm layer: async on-policy (`appo`),
-  off-policy learners (`fast_sac`, `flash_sac`, `warp_sac`), and shared
-  algorithm helpers (`common`)
-- `uni_rl.ipc` — runtime infrastructure: async runner, shared-memory
-  rollout/replay buffers, replay pipelines, DP gradient sync, memory budget
-- `uni_rl.offpolicy` — the generic off-policy double-buffer runner scaffolding
-- `uni_rl.logging` — tensorboard/wandb training loggers, trace recorder
-- `uni_rl.utils` — device, seed, nan-guard, observation helpers
-- `uni_rl.env_contract` — the injected env factory/protocol contract
-
-## Installation
+1. 确认 UniLab 环境能访问 GPU、MuJoCo 和 `unisim`：
 
 ```bash
-pip install unilab-rl
-# or, with uv:
-uv add unilab-rl
+cd /path/to/UniLab
+uv run --project /path/to/UniLab --no-sync -- python -c \
+  'import torch, unisim; print(torch.__version__); print(torch.cuda.get_device_name(0)); print(unisim.__file__)'
 ```
 
-Requires Python 3.10–3.13 and PyTorch ≥ 2.7.
-
-## Usage
-
-`uni_rl` does not construct environments. Inject a picklable env factory
-(`EnvFactory = Callable[[int, Mapping | None], EnvProtocol]`) into the runner
-of your chosen algorithm:
-
-```python
-from collections.abc import Mapping
-
-from uni_rl.env_contract import EnvProtocol
-
-
-def make_env(num_envs: int, cfg: Mapping | None) -> EnvProtocol:
-    """Top-level factory (picklable by reference; no closures/lambdas)."""
-    ...
-```
-
-The env contract is a minimal numpy-based, autoresetting vectorized-env
-protocol: dict observations keyed by observation group (`obs_groups_spec`),
-`step()` with final-observation semantics, and `reset()` returning
-`(obs, info)`. See the module docstring in
-[`src/uni_rl/env_contract.py`](src/uni_rl/env_contract.py) for the full
-contract, and the *new algorithm recipe* section in
-[`AGENTS.md`](AGENTS.md) for how to plug in a custom algorithm via
-`runtime_resolver` without forking.
-
-The breaking canonical TensorBoard/W&B field contract and the historical
-old-to-new migration table are documented in
-[`docs/metrics.md`](docs/metrics.md).
-
-## Off-policy cold-path preparation
-
-The double-buffer runner performs learner-owned warmup after DP initialization
-and before starting the collector. Implement
-`prepare_for_collection(context: OffPolicyWarmupContext)` on a custom learner
-for compilation, graph capture, and other cold paths. Preparation must leave
-weights, optimizers, schedulers, RNG state, and counters unchanged; compiler and
-graph caches are the only sanctioned retained effects. A custom FastSAC runtime
-may instead provide `OffPolicyRuntime.learner_prepare_hook`, and actor adapters
-may provide `warmup_actions`.
-
-Coordination failures use learner phase/progress and process liveness rather
-than a wall-clock performance SLA. `training.inference_request_timeout_sec` is
-deprecated and ignored; remove it from owner YAML during migration.
-
-## Design contract
-
-`uni_rl` does **not** depend on any simulator or environment library.
-Algorithm behavior is owned by the algo modules under `uni_rl.algos.*`;
-runtime infrastructure (`ipc`, `logging`, `offpolicy`, `utils`,
-`env_contract`) lives at the top level and never depends on the algorithm
-layer. See UniLab's training entrypoints for reference env integrations.
-
-## Development
+2. 确认 Hydra 最终合成值：
 
 ```bash
-make sync      # install dependencies (uv)
-make test      # pytest
-make format    # ruff check --fix + ruff format
-uv run mypy src/uni_rl && uv run pyright   # type gates
+uv run --project /path/to/UniLab --no-sync -- \
+  python src/unilab/scripts/train_flashsac.py \
+  --cfg job --resolve task=g1_walk_flat/mujoco
 ```
 
-## Citation
+输出中必须看到 `num_envs: 2048`、`batch_size: 8192`、`updates_per_step: 8`、`policy_frequency: 4`。
 
-If you use `unilab-rl` in your research, please cite the UniLab paper:
+3. 运行真实物理训练。不传上述四个参数，它们由 owner config 提供：
 
-```bibtex
-@article{jia2026unilab,
-  title   = {UniLab: A Heterogeneous Architecture for Robot RL Beyond GPU-Dominant Paradigms},
-  author  = {Yufei Jia and Zhanxiang Cao and Mingrui Yu and Heng Zhang and Shenyu Chen and Dixuan Jiang and Meng Li and Xiaofan Li and Yiyang Liu and Junzhe Wu and Zheng Li and XiLin Fang and Tingyu Cui and Shengcheng Fu and Haoyang Li and Anqi Wang and Zifan Wang and Dongjie Zhu and Chenyu Cao and Zhenbiao Huang and Ziang Zheng and Jie Lu and Xin Ma and Zhengyang Wei and Xiang Zhao and Tianyue Zhan and Ye He and Yuxiang Chen and Yizhou Jiang and Yue Li and Haizhou Ge and Yuhang Dong and Fan Jia and Ziheng Zhang and Meng Zhang and Xiwa Deng and Zhixing Chen and Hanyang Shao and Chenxin Dong and Yixuan Li and Yizhi Chen and Bokui Chen and Kaifeng Zhang and Hanqing Cui and Yusen Qin and Ruqi Huang and Lei Han and Tiancai Wang and Xiang Li and Yue Gao and Guyue Zhou},
-  journal = {arXiv preprint arXiv:2605.30313},
-  year    = {2026},
-  url     = {https://arxiv.org/abs/2605.30313}
-}
+```bash
+uv run --project /path/to/UniLab --no-sync -- python \
+  /path/to/UniLab-FlashSAC-Optmization/experiments/benchmark_flashsac_training.py \
+  --unilab-root /path/to/UniLab \
+  --backend mujoco \
+  --iterations 1000 --summary-last 500 \
+  --output /path/to/UniLab-FlashSAC-Optmization/results/physical_training_comparison.json
 ```
 
-## License
+脚本保留生产 Rich 实时面板，并在 JSON 中写入实际 compose 参数、update 数、全部原始 timing 行以及 mean / median / p90 / p95。
 
-Apache-2.0, same as UniLab.
+> 必须显式使用 `--project /path/to/UniLab`。否则 `uv` 可能选中优化仓库的环境，导致 `ModuleNotFoundError: unisim`。
+
+## 验证
+
+```bash
+cd /path/to/UniLab-FlashSAC-Optmization
+PYTHONPATH=src uv run --project /path/to/UniLab --no-sync -- \
+  pytest -q tests/algos/test_flash_sac_learner.py \
+  tests/algos/test_double_buffer_builders.py
+```
+
+本轮结果：`31 passed, 8 skipped`。

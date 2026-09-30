@@ -1,0 +1,28 @@
+{
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "torch": "2.8.0+cu128",
+    "task": "g1_walk_flat",
+    "backend": "mujoco",
+    "iterations": 1000,
+    "summary_last": 500,
+    "source": "real UniLab train_flashsac.py; owner-config defaults; /tmp/flashsac_default_optimized_1000b"
+  },
+  "training_config": {
+    "num_envs": 2048,
+    "batch_size": 8192,
+    "replay_buffer_n": 256,
+    "learning_starts": 49,
+    "updates_per_step": 8,
+    "policy_frequency": 4,
+    "critic_updates_per_iteration": 8,
+    "actor_updates_per_iteration": 2,
+    "temperature_updates_per_iteration": 2,
+    "target_updates_per_iteration": 8
+  },
+  "learner_train_ms": {"count": 500, "mean_ms": 55.8862940073, "median_ms": 55.8975748718, "p90_ms": 56.4877778292, "p95_ms": 56.6532589495},
+  "collector_cycle_ms": {"count": 500, "mean_ms": 57.8044323015, "median_ms": 57.7969866507, "p90_ms": 58.6021411665, "p95_ms": 58.9272179138},
+  "iter_ms": {"count": 500, "mean_ms": 57.5498790592, "median_ms": 57.5460530818, "p90_ms": 58.1917356690, "p95_ms": 58.3113571629},
+  "summary_first_step": 1116160,
+  "summary_last_step": 2146304
+}

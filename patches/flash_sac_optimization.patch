@@ -1,0 +1,45 @@
+diff --git a/src/uni_rl/algos/flash_sac/learner.py b/src/uni_rl/algos/flash_sac/learner.py
+--- a/src/uni_rl/algos/flash_sac/learner.py
++++ b/src/uni_rl/algos/flash_sac/learner.py
+@@ -655,6 +655,7 @@ class FlashSACLearner(LearnerBoilerplateMixin):
+         batch: dict[str, torch.Tensor],
+         *,
+         read_metrics: bool = True,
++        store_cycle_metrics: bool = True,
+     ) -> dict[str, float]:
+@@ -693,6 +694,8 @@ class FlashSACLearner(LearnerBoilerplateMixin):
+             self.critic.normalize_parameters()
+ 
++        if not read_metrics and not store_cycle_metrics:
++            return {}
+         if not read_metrics:
+@@ -716,6 +719,7 @@ class FlashSACLearner(LearnerBoilerplateMixin):
+         batch: dict[str, torch.Tensor],
+         *,
+         read_metrics: bool = True,
++        store_cycle_metrics: bool = True,
+     ) -> dict[str, float]:
+@@ -765,6 +769,8 @@ class FlashSACLearner(LearnerBoilerplateMixin):
+         post_update_temperature = self.temperature()
+         actor_metric_tensors = (actor_loss, entropy, post_update_temperature, temp_loss)
++        if not read_metrics and not store_cycle_metrics:
++            return {}
+         if not read_metrics:
+@@ -847,16 +853,32 @@ class FlashSACLearner(LearnerBoilerplateMixin):
+         self._update_cycle_lr_cursors = {}
+         batch_size = int(next(iter(large_batch.values())).shape[0]) // updates_per_step
++        last_actor_update = max(
++            (idx for idx in range(updates_per_step) if idx % policy_frequency == 0),
++            default=-1,
++        )
+@@
+-                self.update_actor(batch, read_metrics=False)
+-            self.update_critic(batch, read_metrics=False)
++                self.update_actor(batch, read_metrics=False,
++                    store_cycle_metrics=update_idx == last_actor_update)
++            self.update_critic(batch, read_metrics=False,
++                store_cycle_metrics=update_idx == updates_per_step - 1)
+@@
+-                self.update_actor(batch, read_metrics=False)
++                self.update_actor(batch, read_metrics=False,
++                    store_cycle_metrics=update_idx == last_actor_update)
